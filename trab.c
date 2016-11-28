@@ -1,7 +1,6 @@
 /*-------------------------------------------------------------*/
-/* Hariel G. & Lucas Schuler       */
+/* Exemplo Socket Raw - envio de mensagens com struct          */
 /*-------------------------------------------------------------*/
-
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -20,31 +19,124 @@
 #include <stdlib.h>
 #include "dhcp.h"
 
-unsigned char buffer[350];
+//SERVER E ROUTER MEU IP
+unsigned char buff[350];
 unsigned char buff1[350];
 unsigned char headerIP[20];
 unsigned char headerIPAck[20];
+
+int ips[5] = {230};
+int contIPs = 0;
 
 #define MAC_SRC1 0xa4
 #define MAC_SRC2 0x1f
 #define MAC_SRC3 0x72
 #define MAC_SRC4 0xf5
 #define MAC_SRC5 0x90
-#define MAC_SRC6 0xb7
+#define MAC_SRC6 0x80
+
+
 #define MAC_DEST1 0xa4
 #define MAC_DEST2 0x1f
 #define MAC_DEST3 0x72
 #define MAC_DEST4 0xf5
 #define MAC_DEST5 0x90
-#define MAC_DEST6 0x80
+#define MAC_DEST6 0xb7
+
 #define IP_HEX1	0X0a
 #define IP_HEX2	0X20
 #define IP_HEX3	0X8F
-#define IP_HEX4	0XB4
+#define IP_HEX4	0XCA
 
 
 const char* ip_src="10.32.143.202";
-const char* ip_dst="10.32.143.210";
+
+// Para Referencia CHUPA
+//**********************************************************************************//
+// struct ether_header
+// {
+//   u_int8_t  ether_dhost[ETH_ALEN];	/* destination eth addr	*/
+//   u_int8_t  ether_shost[ETH_ALEN];	/* source ether addr	*/
+//   u_int16_t ether_type;		        /* packet type ID field	*/
+// } __attribute__ ((__packed__));
+//**********************************************************************************//
+// struct ip
+//   {
+// #if __BYTE_ORDER == __LITTLE_ENDIAN
+//     unsigned int ip_hl:4;		/* header length */
+//     unsigned int ip_v:4;		/* version */
+// #endif
+// #if __BYTE_ORDER == __BIG_ENDIAN
+//     unsigned int ip_v:4;		/* version */
+//     unsigned int ip_hl:4;		/* header length */
+// #endif
+//     u_int8_t ip_tos;			/* type of service */
+//     u_short ip_len;			/* total length */
+//     u_short ip_id;			/* identification */
+//     u_short ip_off;			/* fragment offset field */
+// #define	IP_RF 0x8000			/* reserved fragment flag */
+// #define	IP_DF 0x4000			/* dont fragment flag */
+// #define	IP_MF 0x2000			/* more fragments flag */
+// #define	IP_OFFMASK 0x1fff		/* mask for fragmenting bits */
+//     u_int8_t ip_ttl;			/* time to live */
+//     u_int8_t ip_p;			/* protocol */
+//     u_short ip_sum;			/* checksum */
+//     struct in_addr ip_src, ip_dst;	/* source and dest address */
+//   };
+//**********************************************************************************//
+// struct udphdr
+// {
+//   __extension__ union
+//   {
+//     struct
+//     {
+//       u_int16_t uh_sport;		/* source port */
+//       u_int16_t uh_dport;		/* destination port */
+//       u_int16_t uh_ulen;		 udp length 
+//       u_int16_t uh_sum;		/* udp checksum */
+//     };
+//     struct
+//     {
+//       u_int16_t source;
+//       u_int16_t dest;
+//       u_int16_t len;
+//       u_int16_t check;
+//     };
+//   };
+// };
+//**********************************************************************************//
+// struct dhcp_packet {
+//  	u_int8_t  op;		/* 0: Message opcode/type */
+// 	u_int8_t  htype;	/* 1: Hardware addr type (net/if_types.h) */
+// 	u_int8_t  hlen;		/* 2: Hardware addr length */
+// 	u_int8_t  hops;		/* 3: Number of relay agent hops from client */
+// 	u_int32_t xid;		/* 4: Transaction ID */
+// 	u_int16_t secs;		/* 8: Seconds since client started looking */
+// 	u_int16_t flags;	/* 10: Flag bits */
+// 	struct in_addr ciaddr;	/* 12: Client IP address (if already in use) */
+// 	struct in_addr yiaddr;	/* 16: Client IP address */
+// 	struct in_addr siaddr;	/* 18: IP address of next server to talk to */
+// 	struct in_addr giaddr;	/* 20: DHCP relay agent IP address */
+// 	unsigned char chaddr [16];	/* 24: Client hardware address */
+// 	char sname [DHCP_SNAME_LEN];	/* 40: Server name */
+// 	char file [DHCP_FILE_LEN];	/* 104: Boot filename */
+// 	unsigned char options [DHCP_MAX_OPTION_LEN];
+// 				/* 212: Optional parameters
+// 			  (actual length dependent on MTU). */
+// };
+//**********************************************************************************//
+
+
+const char* concat(const char *s1, const char *s2)
+{
+    const size_t len1 = strlen(s1);
+    const size_t len2 = strlen(s2);
+    char *result = malloc(len1+len2+1);//+1 for the zero-terminator
+    //in real code you would check for errors in malloc here
+    memcpy(result, s1, len1);
+    memcpy(result+len1, s2, len2+1);//+1 to copy the null-terminator
+    return result;
+}
 
 unsigned short in_cksum(unsigned short *addr,int len)
 {
@@ -53,16 +145,23 @@ unsigned short in_cksum(unsigned short *addr,int len)
         register u_short *w = addr;
         register int nleft = len;
 
+        /*
+         * Our algorithm is simple, using a 32 bit accumulator (sum), we add
+         * sequential 16 bit words to it, and at the end, fold back all the
+         * carry bits from the top 16 bits into the lower 16 bits.
+         */
         while (nleft > 1)  {
                 sum += *w++;
                 nleft -= 2;
         }
 
+        /* mop up an odd byte, if necessary */
         if (nleft == 1) {
                 *(u_char *)(&answer) = *(u_char *)w ;
                 sum += answer;
         }
 
+        /* add back carry outs from top 16 bits to low 16 bits */
         sum = (sum >> 16) + (sum & 0xffff);     /* add hi 16 to low 16 */
         sum += (sum >> 16);                     /* add carry */
         answer = ~sum;                          /* truncate to 16 bits */
@@ -70,15 +169,17 @@ unsigned short in_cksum(unsigned short *addr,int len)
 }
 
 
-void pacoteOffer()
+void monta_pacoteOffer(const char* ip_dst)
 {
-
+	// as struct estao descritas nos seus arquivos .h
+	// por exemplo a ether_header esta no net/ethert.h
+	// a struct ip esta descrita no netinet/ip.h
 	struct ether_header *eth;
 	struct ether_header *ethOri;
 
 	// coloca o ponteiro do header ethernet apontando para a 1a. posicao do buffer
 	// onde inicia o header do ethernet.
-	eth = (struct ether_header *) &buffer[0];
+	eth = (struct ether_header *) &buff[0];
 	ethOri = (struct ether_header *) &buff1[0];
 
 	//Endereco Mac Destino
@@ -101,7 +202,7 @@ void pacoteOffer()
 
 	struct ip *sIP;
 	//htons se maior que 8 bytes usar e nao nao usar
-	sIP = (struct ip *) &buffer[14];
+	sIP = (struct ip *) &buff[14];
 	sIP->ip_v = 0x04;
 	sIP->ip_hl = 0x05;	
 	sIP->ip_tos = 0x0;
@@ -118,14 +219,20 @@ void pacoteOffer()
 	inet_aton(ip_dst, &sIP->ip_dst);//IP PARA DAR PARA A MAQUINA
 	
 	
-	memcpy(headerIP, &buffer[14], 20); //ou  memcpy(headerIP, buff+14, 20); 
+	memcpy(headerIP, &buff[14], 20); //ou  memcpy(headerIP, buff+14, 20); 
 	sIP->ip_sum = in_cksum((unsigned short *)&headerIP, sizeof(struct ip));
 
+
+
+
+	// as struct estao descritas nos seus arquivos .h
+	// por exemplo a ether_header esta no net/ethert.h
+	// a struct ip esta descrita no netinet/ip.h
 	struct udphdr *sUDP;
 
 	// coloca o ponteiro do header ethernet apontando para a 1a. posicao do buffer
 	// onde inicia o header do ethernet.
-	sUDP = (struct udphdr *) &buffer[14+20];
+	sUDP = (struct udphdr *) &buff[14+20];
 	//htons(sUDP->uh_sport=67);
 	sUDP->uh_sport = htons(0x43);
 
@@ -134,31 +241,33 @@ void pacoteOffer()
 	sUDP->uh_ulen=htons(0x13c);
 	sUDP->uh_sum=htons(0x00);
 
-	//tem que ver checksum
-	struct dhcp_packet *sDhcp;
-	struct dhcp_packet *sDhcpAux;
-	sDhcp = (struct dhcp_packet *) &buffer[14+20+8];
-	sDhcpAux = (struct dhcp_packet *) &buff1[14+20+8];
+	//Usar metodo checsum para calculoar
 
-	sDhcp->op = 0x02;
-		sDhcp->htype=0x01;
-	sDhcp->hlen=0x06;
-	sDhcp->hops=0x0;
-	sDhcp->xid=	sDhcpAux->xid;
-	sDhcp->secs=htons(0x0000);
-	sDhcp->flags=htons(0x0000);
-	inet_aton("0.0.0.0", &sDhcp->ciaddr);
-	inet_aton(ip_dst, &sDhcp->yiaddr);//IP OFERDADO
-	inet_aton("0.0.0.0", &sDhcp->siaddr);
-	inet_aton("0.0.0.0", &sDhcp->giaddr);
-	
-	//MAC DESTINO
-	sDhcp->chaddr[0]= MAC_DEST1;
-	sDhcp->chaddr[1]= MAC_DEST2;
-	sDhcp->chaddr[2]= MAC_DEST3;	
-	sDhcp->chaddr[3]= MAC_DEST4;
-	sDhcp->chaddr[4]= MAC_DEST5;
-	sDhcp->chaddr[5]= MAC_DEST6;
+
+		struct dhcp_packet *sDhcp;
+		struct dhcp_packet *sDhcpAux;
+		sDhcp = (struct dhcp_packet *) &buff[14+20+8];
+		sDhcpAux = (struct dhcp_packet *) &buff1[14+20+8];
+
+		sDhcp->op = 0x02;
+ 		sDhcp->htype=0x01;
+		sDhcp->hlen=0x06;
+		sDhcp->hops=0x0;
+		sDhcp->xid=	sDhcpAux->xid;
+		sDhcp->secs=htons(0x0000);
+		sDhcp->flags=htons(0x0000);
+		inet_aton("0.0.0.0", &sDhcp->ciaddr);
+		inet_aton(ip_dst, &sDhcp->yiaddr);//IP OFERDADO
+		inet_aton("0.0.0.0", &sDhcp->siaddr);
+		inet_aton("0.0.0.0", &sDhcp->giaddr);
+		
+		//MAC DESTINO
+		sDhcp->chaddr[0]= sDhcpAux->chaddr[0];
+		sDhcp->chaddr[1]= sDhcpAux->chaddr[1];
+		sDhcp->chaddr[2]= sDhcpAux->chaddr[2];	
+		sDhcp->chaddr[3]= sDhcpAux->chaddr[3];
+		sDhcp->chaddr[4]= sDhcpAux->chaddr[4];
+		sDhcp->chaddr[5]= sDhcpAux->chaddr[5];
 
 	/*Magic COokie*/
 	sDhcp->options[0]=0x63;
@@ -199,7 +308,11 @@ void pacoteOffer()
 	sDhcp->options[23]=0xff;
 	sDhcp->options[24]=0x00;
 
-	//Router (27 AO 30 MEU IP)(MEU IP)(MAQUINA HOST) EM HEX
+
+
+
+
+		//Router (27 AO 30 MEU IP)(MEU IP)(MAQUINA HOST) EM HEX
 
 	sDhcp->options[25]=0x03;
 	sDhcp->options[26]=0x04;
@@ -208,7 +321,11 @@ void pacoteOffer()
 	sDhcp->options[29]=IP_HEX3;
 	sDhcp->options[30]=IP_HEX4;
 
-	//dns denovo
+
+
+	//Domain Name Server  (33 AO 36 MEU IP)(MEU IP)(MAQUINA HOST) EM HEX
+
+
 	sDhcp->options[31]=0x06;
 	sDhcp->options[32]=0X04;
 	sDhcp->options[33]=IP_HEX1;
@@ -216,20 +333,29 @@ void pacoteOffer()
 	sDhcp->options[35]=IP_HEX3;
 	sDhcp->options[36]=IP_HEX4;
 
-	//fim
+		//END
 	sDhcp->options[37]=0xff;
+
+
 }
 
-void pacoteack()
+void monta_pacoteACK(const char* ip_dst)
 {
+	
+	printf("%c",ip_dst);
+	// as struct estao descritas nos seus arquivos .h
+	// por exemplo a ether_header esta no net/ethert.h
+	// a struct ip esta descrita no netinet/ip.h
 	// as struct estao descritas nos seus arquivos .h
 	// por exemplo a ether_header esta no net/ethert.h
 	// a struct ip esta descrita no netinet/ip.h
 	struct ether_header *eth;
+	struct ether_header *ethOri;
 
 	// coloca o ponteiro do header ethernet apontando para a 1a. posicao do buffer
 	// onde inicia o header do ethernet.
-	eth = (struct ether_header *) &buffer[0];
+	eth = (struct ether_header *) &buff[0];
+	ethOri = (struct ether_header *) &buff1[0];
 
 	//Endereco Mac Destino
 	eth->ether_dhost[0] = MAC_DEST1;
@@ -251,7 +377,7 @@ void pacoteack()
 
 	struct ip *sIP;
 	//htons se maior que 8 bytes usar e nao nao usar
-	sIP = (struct ip *) &buffer[14];
+	sIP = (struct ip *) &buff[14];
 	sIP->ip_v = 0x04;
 	sIP->ip_hl = 0x05;	
 	sIP->ip_tos = 0x0;
@@ -265,8 +391,12 @@ void pacoteack()
 	inet_aton(ip_src, &sIP->ip_src);//MEU IP
 	inet_aton(ip_dst, &sIP->ip_dst);//IP PARA DAR PARA A MAQUINA
 	
-	memcpy(headerIPAck, &buffer[14], 20); //ou  memcpy(headerIP, buff+14, 20); 
+	
+	memcpy(headerIPAck, &buff[14], 20); //ou  memcpy(headerIP, buff+14, 20); 
 	sIP->ip_sum = in_cksum((unsigned short *)&headerIP, sizeof(struct ip));
+
+
+
 
 
 	// as struct estao descritas nos seus arquivos .h
@@ -276,7 +406,7 @@ void pacoteack()
 
 	// coloca o ponteiro do header ethernet apontando para a 1a. posicao do buffer
 	// onde inicia o header do ethernet.
-	sUDP = (struct udphdr *) &buffer[14+20];
+	sUDP = (struct udphdr *) &buff[14+20];
 	//htons(sUDP->uh_sport=67);
 	sUDP->uh_sport = htons(0x43);
 
@@ -286,43 +416,50 @@ void pacoteack()
 	sUDP->uh_sum=htons(0x00);
 	//Usar metodo checsum para calculoar
 
-	struct dhcp_packet *sDhcp;
-	struct dhcp_packet *sDhcpAux;
+
+		struct dhcp_packet *sDhcp;
+		struct dhcp_packet *sDhcpAux;
+		
+		sDhcp = (struct dhcp_packet *) &buff[14+20+8];
+		sDhcpAux = (struct dhcp_packet *) &buff1[14+20+8];
 	
-	sDhcp = (struct dhcp_packet *) &buffer[14+20+8];
-	sDhcpAux = (struct dhcp_packet *) &buff1[14+20+8];
+	
 
-	sDhcp->op = 0x02;
-		sDhcp->htype=0x01;
-	sDhcp->hlen=0x06;
-	sDhcp->hops=0x0;
-	sDhcp->xid=	sDhcpAux->xid;
-	sDhcp->secs=htons(0x0000);
-	sDhcp->flags=htons(0x0000);
-	inet_aton("0.0.0.0", &sDhcp->ciaddr);
-	inet_aton(ip_dst, &sDhcp->yiaddr);
-	inet_aton("0.0.0.0", &sDhcp->siaddr);
-	inet_aton("0.0.0.0", &sDhcp->giaddr);
 
-	sDhcp->chaddr[0]= MAC_DEST1;
-	sDhcp->chaddr[1]= MAC_DEST2;
-	sDhcp->chaddr[2]= MAC_DEST3;	
-	sDhcp->chaddr[3]= MAC_DEST4;
-	sDhcp->chaddr[4]= MAC_DEST5;
-	sDhcp->chaddr[5]= MAC_DEST6;
+		sDhcp->op = 0x02;
+ 		sDhcp->htype=0x01;
+		sDhcp->hlen=0x06;
+		sDhcp->hops=0x0;
+		sDhcp->xid=	sDhcpAux->xid;
+		sDhcp->secs=htons(0x0000);
+		sDhcp->flags=htons(0x0000);
+		inet_aton("0.0.0.0", &sDhcp->ciaddr);
+		inet_aton(ip_dst, &sDhcp->yiaddr);
+		inet_aton("0.0.0.0", &sDhcp->siaddr);
+		inet_aton("0.0.0.0", &sDhcp->giaddr);
 
-	/*ainda não sei porquê mas tem que ter*/
+			//MAC DESTINO
+		sDhcp->chaddr[0]= MAC_DEST1;
+		sDhcp->chaddr[1]= MAC_DEST2;
+		sDhcp->chaddr[2]= MAC_DEST3;	
+		sDhcp->chaddr[3]= MAC_DEST4;
+		sDhcp->chaddr[4]= MAC_DEST5;
+		sDhcp->chaddr[5]= MAC_DEST6;
+
+
+	/*Magic COokie*/
 	sDhcp->options[0]=0x63;
 	sDhcp->options[1]=0x82;
 	sDhcp->options[2]=0x53;
 	sDhcp->options[3]=0x63;
 
-	//DHCP Message 
+	//DHCP Message TYoe (ack)
 	sDhcp->options[4]=0x35;
 	sDhcp->options[5]=0x01;
 	sDhcp->options[6]=0x05;
 	
-	//DHCP server
+	
+	//DHCP Server Identifer (9 AO 12IP EM HEX)(MEU IP)(MAQUINA HOST)
 	sDhcp->options[7]=0x36;
 	sDhcp->options[8]=0x04;
 	sDhcp->options[9]=IP_HEX1;
@@ -330,7 +467,7 @@ void pacoteack()
 	sDhcp->options[11]=IP_HEX3;
 	sDhcp->options[12]=IP_HEX4;
 
-	//release time
+	//IP Address Lease Time 
 
 	sDhcp->options[13]=0x33;
 	sDhcp->options[14]=0x04;
@@ -339,16 +476,21 @@ void pacoteack()
 	sDhcp->options[17]=0x38;
 	sDhcp->options[18]=0x80;
 
-	//mascara
+	
+	//Subnet Mask  (MASCARA PADRÃO 255.255.255.0)
 
-	sDhcp->options[19]=0x01; // opção
-	sDhcp->options[20]=0x04; // length
+	sDhcp->options[19]=0x01; // NUMERO
+	sDhcp->options[20]=0x04; // TAMANHO
 	sDhcp->options[21]=0xff; 
 	sDhcp->options[22]=0xff;
 	sDhcp->options[23]=0xff;
 	sDhcp->options[24]=0x00;
 
-	//router
+
+
+
+
+		//Router (27 AO 30 MEU IP)(MEU IP)(MAQUINA HOST) EM HEX
 
 	sDhcp->options[25]=0x03;
 	sDhcp->options[26]=0x04;
@@ -357,7 +499,10 @@ void pacoteack()
 	sDhcp->options[29]=IP_HEX3;
 	sDhcp->options[30]=IP_HEX4;
 
-	//DNS
+
+
+	//Domain Name Server  (33 AO 36 MEU IP)(MEU IP)(MAQUINA HOST) EM HEX
+
 
 	sDhcp->options[31]=0x06;
 	sDhcp->options[32]=0X04;
@@ -366,7 +511,7 @@ void pacoteack()
 	sDhcp->options[35]=IP_HEX3;
 	sDhcp->options[36]=IP_HEX4;
 
-	//cabô
+		//END
 	sDhcp->options[37]=0xff;
 	}
 
@@ -387,7 +532,7 @@ int main(int argc,char *argv[])
     /* Criacao do socket. Uso do protocolo Ethernet em todos os pacotes. D� um "man" para ver os par�metros.*/
     /* htons: converte um short (2-byte) integer para standard network byte order. */
 	if((sock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0)  {
-		printf("Erro ao abrir socket\n");
+		printf("Erro na criacao do socket.\n");
         exit(1);
  	}
 
@@ -398,32 +543,39 @@ int main(int argc,char *argv[])
 	strcpy(ifr.ifr_name, "enp4s0");
 
 	if(ioctl(sock, SIOCGIFINDEX, &ifr) < 0)
-		printf("pau no ioctl!");
+		printf("erro no ioctl!");
 
+	
 		to.sll_ifindex = ifr.ifr_ifindex; /* indice da interface pela qual os pacotes serao enviados */
 		len = sizeof(struct sockaddr_ll);
 
-	while(true)
+	while(1)
 	{
 		recv(sock,(char *) &buff1, sizeof(buff1), 0x0);
+		const char* ip_dst = "10.32.143.230";
+		monta_pacoteACK(ip_dst);
+		if(sendto(sock, (char *) buff, sizeof(buff), 0, (struct sockaddr*) &to, len)<0){
+								printf("\nAck");
+							}
 		if(buff1[23]==0x11)
 		{
 			if(buff1[35]=0X44 && buff1[37] == 0x43)
 			{
 				if(buff1[282]==0x35 && buff1[283]==0x01 && buff1[284]==0x01)
 				{					
-													
-							printf("vou mandar offer");						
-							pacoteOffer();
-							if(sendto(sock, (char *) buffer, sizeof(buffer), 0, (struct sockaddr*) &to, len)<0){
+							
+							const char* ip_dst = "10.32.143.'\"'"+ips[contIPs] + '\"';
+							monta_pacoteOffer(ip_dst);
+							if(sendto(sock, (char *) buff, sizeof(buff), 0, (struct sockaddr*) &to, len)<0){
 															printf("\nOffer");
 							}
 				}
 				else if(buff1[282]==0x35 && buff1[283]==0x01 && buff1[284]==0x03)
 				{				
-					printf("vou mandar ack");	
-							pacoteack();
-							if(sendto(sock, (char *) buffer, sizeof(buffer), 0, (struct sockaddr*) &to, len)<0){
+								const char* ip_dst = "10.32.143.'\"'"+ips[contIPs] + '\"';
+							monta_pacoteACK(ip_dst);
+							contIPs++;
+							if(sendto(sock, (char *) buff, sizeof(buff), 0, (struct sockaddr*) &to, len)<0){
 								printf("\nAck");
 							}
 				}

@@ -403,7 +403,7 @@ int main(int argc,char *argv[])
 		to.sll_ifindex = ifr.ifr_ifindex; /* indice da interface pela qual os pacotes serao enviados */
 		len = sizeof(struct sockaddr_ll);
 
-	while(true)
+	for(;;)
 	{
 		recv(sock,(char *) &buff1, sizeof(buff1), 0x0);
 		if(buff1[23]==0x11)
