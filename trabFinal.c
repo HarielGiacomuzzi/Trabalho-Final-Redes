@@ -1,5 +1,5 @@
 /*-------------------------------------------------------------*/
-/* Hariel G. & Lucas Schuler       */
+/* Hariel G. & Lucas Schuler                                   */
 /*-------------------------------------------------------------*/
 
 #include <stdio.h>
@@ -153,58 +153,57 @@ void superMontaPacote(int option)
     struct dhcp_packet *sDhcp;
     struct dhcp_packet *sDhcpAux;
 
+    eth = (struct ether_header *) &buffer[0];
+    
+    //Endereco Mac Destino
+    eth->ether_dhost[0] = MAC_DEST1;
+    eth->ether_dhost[1] = MAC_DEST2;
+    eth->ether_dhost[2] = MAC_DEST3;
+    eth->ether_dhost[3] = MAC_DEST4;
+    eth->ether_dhost[4] = MAC_DEST5;
+    eth->ether_dhost[5] = MAC_DEST6;
+
+    //Endereco Mac Origem
+    eth->ether_shost[0] = MAC_SRC1;
+    eth->ether_shost[1] = MAC_SRC2;
+    eth->ether_shost[2] = MAC_SRC3;
+    eth->ether_shost[3] = MAC_SRC4;
+    eth->ether_shost[4] = MAC_SRC5;
+    eth->ether_shost[5] = MAC_SRC6;
+
+    eth->ether_type = htons(0X800);
+    
+    
+    //htons se maior que 8 bytes usar e nao nao usar
+    sIP = (struct ip *) &buffer[14];
+    sIP->ip_v = 0x04;
+    sIP->ip_hl = 0x05;	
+    sIP->ip_tos = 0x0;
+    sIP->ip_len= htons(0x150);
+
+    sIP->ip_id=htons(0x00);
+
+    sIP->ip_off=htons(0x00);
+    sIP->ip_ttl = 0x10;
+    sIP->ip_p = 0x11;	
+
+    inet_aton(ip_src, &sIP->ip_src);//quem eu sou
+    inet_aton(ip_dst, &sIP->ip_dst);//IP que vou oferecer
+    
+    sUDP = (struct udphdr *) &buffer[34]; // 14 + 20
+    sUDP->uh_sport = htons(0x43);
+
+    sUDP->uh_dport=htons(0x44);
+
+    sUDP->uh_ulen=htons(0x13c);
+    sUDP->uh_sum=htons(0x00);
+    
     if(option){
-        
-        eth = (struct ether_header *) &buffer[0];
+         
         ethOri = (struct ether_header *) &buff1[0];
-
-        //Endereco Mac Destino
-        eth->ether_dhost[0] = MAC_DEST1;
-        eth->ether_dhost[1] = MAC_DEST2;
-        eth->ether_dhost[2] = MAC_DEST3;
-        eth->ether_dhost[3] = MAC_DEST4;
-        eth->ether_dhost[4] = MAC_DEST5;
-        eth->ether_dhost[5] = MAC_DEST6;
-
-        //Endereco Mac Origem
-        eth->ether_shost[0] = MAC_SRC1;
-        eth->ether_shost[1] = MAC_SRC2;
-        eth->ether_shost[2] = MAC_SRC3;
-        eth->ether_shost[3] = MAC_SRC4;
-        eth->ether_shost[4] = MAC_SRC5;
-        eth->ether_shost[5] = MAC_SRC6;
-
-        eth->ether_type = htons(0X800);
-
-        
-        //htons se maior que 8 bytes usar e nao nao usar
-        sIP = (struct ip *) &buffer[14];
-        sIP->ip_v = 0x04;
-        sIP->ip_hl = 0x05;	
-        sIP->ip_tos = 0x0;
-        sIP->ip_len= htons(0x150);
-
-        sIP->ip_id=htons(0x00);
-        
-        sIP->ip_off=htons(0x00);
-        sIP->ip_ttl = 0x10;
-        sIP->ip_p = 0x11;	
-        
-        inet_aton(ip_src, &sIP->ip_src);//quem eu sou
-        inet_aton(ip_dst, &sIP->ip_dst);//IP que vou oferecer
-        
         
         memcpy(headerIP, &buffer[14], 20); //ou  memcpy(headerIP, buff+14, 20); 
         sIP->ip_sum = in_cksum((unsigned short *)&headerIP, sizeof(struct ip));
-
-        
-        sUDP = (struct udphdr *) &buffer[14+20];
-        sUDP->uh_sport = htons(0x43);
-
-        sUDP->uh_dport=htons(0x44);
-
-        sUDP->uh_ulen=htons(0x13c);
-        sUDP->uh_sum=htons(0x00);
 
         //tem que ver checksum
         sDhcp = (struct dhcp_packet *) &buffer[14+20+8];
@@ -289,52 +288,8 @@ void superMontaPacote(int option)
     }
     else{
         
-        eth = (struct ether_header *) &buffer[0];
-        
-        //Endereco Mac Destino
-        eth->ether_dhost[0] = MAC_DEST1;
-        eth->ether_dhost[1] = MAC_DEST2;
-        eth->ether_dhost[2] = MAC_DEST3;
-        eth->ether_dhost[3] = MAC_DEST4;
-        eth->ether_dhost[4] = MAC_DEST5;
-        eth->ether_dhost[5] = MAC_DEST6;
-        
-        //Endereco Mac Origem
-        eth->ether_shost[0] = MAC_SRC1;
-        eth->ether_shost[1] = MAC_SRC2;
-        eth->ether_shost[2] = MAC_SRC3;
-        eth->ether_shost[3] = MAC_SRC4;
-        eth->ether_shost[4] = MAC_SRC5;
-        eth->ether_shost[5] = MAC_SRC6;
-        
-        eth->ether_type = htons(0X800);
-        
-        
-        //htons se maior que 8 bytes usar e nao nao usar
-        sIP = (struct ip *) &buffer[14];
-        sIP->ip_v = 0x04;
-        sIP->ip_hl = 0x05;
-        sIP->ip_tos = 0x0;
-        sIP->ip_len= htons(0x150);
-        sIP->ip_id=htons(0x00);
-        sIP->ip_off=htons(0x00);
-        sIP->ip_ttl = 0x10;
-        sIP->ip_p = 0x11;
-        
-        inet_aton(ip_src, &sIP->ip_src);//MEU IP
-        inet_aton(ip_dst, &sIP->ip_dst);//IP que tô oferecendo
-        
         memcpy(headerIPAck, &buffer[14], 20);
         sIP->ip_sum = in_cksum((unsigned short *)&headerIP, sizeof(struct ip));
-        
-
-        sUDP = (struct udphdr *) &buffer[14+20];
-        sUDP->uh_sport = htons(0x43);
-        
-        sUDP->uh_dport=htons(0x44);
-        
-        sUDP->uh_ulen=htons(0x13c);
-        sUDP->uh_sum=htons(0x00);
         
         //Usar metodo checsum para calculoar
         sDhcp = (struct dhcp_packet *) &buffer[14+20+8];
